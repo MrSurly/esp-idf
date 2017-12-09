@@ -1,0 +1,1 @@
+../../bootloader/subproject/main/esp_ota_boot_count.h
