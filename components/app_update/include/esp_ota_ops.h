@@ -21,6 +21,7 @@
 #include "esp_err.h"
 #include "esp_partition.h"
 #include "esp_spi_flash.h"
+#include "esp_ota_boot_count.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -33,6 +34,7 @@ extern "C"
 #define ESP_ERR_OTA_PARTITION_CONFLICT           (ESP_ERR_OTA_BASE + 0x01)  /*!< Error if request was to write or erase the current running partition */
 #define ESP_ERR_OTA_SELECT_INFO_INVALID          (ESP_ERR_OTA_BASE + 0x02)  /*!< Error if OTA data partition contains invalid content */
 #define ESP_ERR_OTA_VALIDATE_FAILED              (ESP_ERR_OTA_BASE + 0x03)  /*!< Error if OTA app image is invalid */
+
 
 /**
  * @brief Opaque handle for an application OTA update

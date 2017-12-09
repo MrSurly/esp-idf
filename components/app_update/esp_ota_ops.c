@@ -28,6 +28,7 @@
 #include "esp_image_format.h"
 #include "esp_secure_boot.h"
 #include "esp_flash_encrypt.h"
+#include "esp_flash_data_types.h"
 #include "sdkconfig.h"
 
 #include "esp_ota_ops.h"
@@ -51,19 +52,21 @@ typedef struct ota_ops_entry_ {
     LIST_ENTRY(ota_ops_entry_) entries;
 } ota_ops_entry_t;
 
-/* OTA selection structure (two copies in the OTA data partition.)
-   Size of 32 bytes is friendly to flash encryption */
-typedef struct {
-    uint32_t ota_seq;
-    uint8_t  seq_label[24];
-    uint32_t crc;                /* CRC32 of ota_seq field only */
-} ota_select;
-
 static LIST_HEAD(ota_ops_entries_head, ota_ops_entry_) s_ota_ops_entries_head =
     LIST_HEAD_INITIALIZER(s_ota_ops_entries_head);
 
 static uint32_t s_ota_ops_last_handle = 0;
-static ota_select s_ota_select[2];
+
+// 0 & 1 are currently bootable OTA partition
+//   ota_seq is which OTA entry to boot
+//   max_boot_count is how many times to boot before invalidating this OTA
+//
+// 2 & 3 are current boot count for that OTA partion
+//   ota_seq is how many times current OTA has booted
+//   max_boot_count is not used
+
+
+static esp_ota_select_entry_t s_ota_select[4];
 
 const static char *TAG = "esp_ota_ops";
 
@@ -254,28 +257,30 @@ esp_err_t esp_ota_end(esp_ota_handle_t handle)
     return ret;
 }
 
-static uint32_t ota_select_crc(const ota_select *s)
+/*
+static uint32_t ota_select_crc(const esp_ota_select_entry_t *s)
 {
     return crc32_le(UINT32_MAX, (uint8_t *)&s->ota_seq, 4);
 }
 
-static bool ota_select_valid(const ota_select *s)
+static bool ota_select_valid(const esp_ota_select_entry_t *s)
 {
     return s->ota_seq != UINT32_MAX && s->crc == ota_select_crc(s);
 }
+*/
 
 static esp_err_t rewrite_ota_seq(uint32_t seq, uint8_t sec_id, const esp_partition_t *ota_data_partition)
 {
     esp_err_t ret;
 
-    if (sec_id == 0 || sec_id == 1) {
+    if (sec_id <= 3) {
         s_ota_select[sec_id].ota_seq = seq;
         s_ota_select[sec_id].crc = ota_select_crc(&s_ota_select[sec_id]);
         ret = esp_partition_erase_range(ota_data_partition, sec_id * SPI_FLASH_SEC_SIZE, SPI_FLASH_SEC_SIZE);
         if (ret != ESP_OK) {
             return ret;
         } else {
-            return esp_partition_write(ota_data_partition, SPI_FLASH_SEC_SIZE * sec_id, &s_ota_select[sec_id].ota_seq, sizeof(ota_select));
+            return esp_partition_write(ota_data_partition, SPI_FLASH_SEC_SIZE * sec_id, &s_ota_select[sec_id].ota_seq, sizeof(esp_ota_select_entry_t));
         }
     } else {
         return ESP_ERR_INVALID_ARG;
@@ -306,7 +311,7 @@ static esp_err_t esp_rewrite_ota_data(esp_partition_subtype_t subtype)
     if (find_partition != NULL) {
         ota_app_count = get_ota_partition_count();
         //esp32_idf use two sector for store information about which partition is running
-        //it defined the two sector as ota data partition,two structure ota_select is saved in the two sector
+        //it defined the two sector as ota data partition,two structure esp_ota_select_entry_t is saved in the two sector
         //named data in first sector as s_ota_select[0], second sector data as s_ota_select[1]
         //e.g.
         //if s_ota_select[0].ota_seq == s_ota_select[1].ota_seq == 0xFFFFFFFF,means ota info partition is in init status
@@ -329,8 +334,8 @@ static esp_err_t esp_rewrite_ota_data(esp_partition_subtype_t subtype)
             result = NULL;
             return ret;
         } else {
-            memcpy(&s_ota_select[0], result, sizeof(ota_select));
-            memcpy(&s_ota_select[1], result + SPI_FLASH_SEC_SIZE, sizeof(ota_select));
+            memcpy(&s_ota_select[0], result, sizeof(esp_ota_select_entry_t));
+            memcpy(&s_ota_select[1], result + SPI_FLASH_SEC_SIZE, sizeof(esp_ota_select_entry_t));
             spi_flash_munmap(ota_data_map);
         }
 
@@ -367,6 +372,7 @@ static esp_err_t esp_rewrite_ota_data(esp_partition_subtype_t subtype)
         return ESP_ERR_NOT_FOUND;
     }
 }
+
 
 esp_err_t esp_ota_set_boot_partition(const esp_partition_t *partition)
 {
@@ -461,8 +467,8 @@ const esp_partition_t *esp_ota_get_boot_partition(void)
         ESP_LOGE(TAG, "mmap ota data filed");
         return NULL;
     } else {
-        memcpy(&s_ota_select[0], result, sizeof(ota_select));
-        memcpy(&s_ota_select[1], result + 0x1000, sizeof(ota_select));
+        memcpy(&s_ota_select[0], result, sizeof(esp_ota_select_entry_t));
+        memcpy(&s_ota_select[1], result + 0x1000, sizeof(esp_ota_select_entry_t));
         spi_flash_munmap(ota_data_map);
     }
     ota_app_count = get_ota_partition_count();
