@@ -28,7 +28,8 @@ extern "C"
    Size of 32 bytes is friendly to flash encryption */
 typedef struct {
     uint32_t ota_seq;
-    uint8_t  seq_label[24];
+    uint32_t max_boot_count;
+    uint8_t  seq_label[20];
     uint32_t crc; /* CRC32 of ota_seq field only */
 } esp_ota_select_entry_t;
 
