@@ -23,7 +23,6 @@
 #include "rom/efuse.h"
 #include "rom/ets_sys.h"
 #include "rom/spi_flash.h"
-#include "rom/crc.h"
 #include "rom/rtc.h"
 #include "rom/uart.h"
 #include "rom/gpio.h"
@@ -45,6 +44,7 @@
 #include "esp_secure_boot.h"
 #include "esp_flash_encrypt.h"
 #include "esp_flash_partitions.h"
+#include "esp_ota_boot_count.h"
 #include "bootloader_flash.h"
 #include "bootloader_random.h"
 #include "bootloader_config.h"
@@ -235,15 +235,6 @@ bool load_partition_table(bootloader_state_t* bs)
     return true;
 }
 
-static uint32_t ota_select_crc(const esp_ota_select_entry_t *s)
-{
-  return crc32_le(UINT32_MAX, (uint8_t*)&s->ota_seq, 4);
-}
-
-static bool ota_select_valid(const esp_ota_select_entry_t *s)
-{
-  return s->ota_seq != UINT32_MAX && s->crc == ota_select_crc(s);
-}
 
 /* indexes used by index_to_partition are the OTA index
    number, or these special constants */
@@ -405,6 +396,18 @@ static bool load_boot_image(const bootloader_state_t *bs, int start_index, esp_i
         }
         ESP_LOGD(TAG, TRY_LOG_FORMAT, index, part.offset, part.size);
         if (try_load_partition(&part, result)) {
+
+            if ( bs->ota_info.offset != 0 && index == start_index && index != FACTORY_INDEX) {
+                ESP_LOGI(TAG, "Booting from specified OTA partition");
+                if (bs->ota_info.size >= SPI_FLASH_SEC_SIZE * 4) {
+                    // possible boot count
+                    uint32_t boot_count;
+                    if (esp_ota_boot_count_op_bootloader(bs->ota_info.offset, OTA_BOOT_COUNT_QUERY, &boot_count) == ESP_OK) {
+                        ESP_LOGI(TAG, "Boot count %u", boot_count);
+                    }
+                    //esp_ota_boot_count_op(OTA_BOOT_COUNT_INCREMENT, NULL);
+                }
+            }
             return true;
         }
         log_invalid_app_partition(index);
