@@ -12,14 +12,15 @@
 
 
 
-static esp_err_t rewrite_ota_seq(uint32_t seq, uint8_t sec_id, uint32_t ota_part_offset) {
+esp_err_t rewrite_ota_seq(uint32_t seq, uint32_t max_boot_count, uint8_t sec_id, uint32_t ota_part_offset) {
     esp_err_t ret;
-
 
     if (sec_id <= 3) {
 
         esp_ota_select_entry_t entry;
+        memset(&entry, 0xff, sizeof(entry));
         entry.ota_seq = seq;
+        entry.max_boot_count = max_boot_count;
         entry.crc = ota_select_crc(&entry);
 
 #ifdef BOOTLOADER_BUILD
@@ -103,15 +104,15 @@ esp_err_t esp_ota_boot_count_op_bootloader(uint32_t ota_part_offset, esp_ota_boo
             if(valid0 && valid1) {
                 if(count[0].ota_seq > count[1].ota_seq) { 
                     // Write count0.seq + 1 to count1
-                    return rewrite_ota_seq(count[0].ota_seq + 1, 3, ota_part_offset);
+                    return rewrite_ota_seq(count[0].ota_seq + 1, 0, 3, ota_part_offset);
                 } else {
                     // Write count1.seq + 1 to count0
-                    return rewrite_ota_seq(count[1].ota_seq + 1, 2, ota_part_offset);
+                    return rewrite_ota_seq(count[1].ota_seq + 1, 0, 2, ota_part_offset);
                 }
             } else if (valid0) {
-                return rewrite_ota_seq(count[0].ota_seq + 1, 3, ota_part_offset);
+                return rewrite_ota_seq(count[0].ota_seq + 1, 0, 3, ota_part_offset);
             } else if (valid1) {
-                return rewrite_ota_seq(count[1].ota_seq + 1, 2, ota_part_offset);
+                return rewrite_ota_seq(count[1].ota_seq + 1, 0, 2, ota_part_offset);
             } else {
                 return ESP_FAIL;
             }
@@ -132,7 +133,7 @@ esp_err_t esp_ota_boot_count_op_bootloader(uint32_t ota_part_offset, esp_ota_boo
             }
 
             if (op == OTA_BOOT_COUNT_ZERO) {
-                return rewrite_ota_seq(0, 2, ota_part_offset);
+                return rewrite_ota_seq(0, 0, 2,  ota_part_offset);
             }
 
 

@@ -257,35 +257,6 @@ esp_err_t esp_ota_end(esp_ota_handle_t handle)
     return ret;
 }
 
-/*
-static uint32_t ota_select_crc(const esp_ota_select_entry_t *s)
-{
-    return crc32_le(UINT32_MAX, (uint8_t *)&s->ota_seq, 4);
-}
-
-static bool ota_select_valid(const esp_ota_select_entry_t *s)
-{
-    return s->ota_seq != UINT32_MAX && s->crc == ota_select_crc(s);
-}
-*/
-
-static esp_err_t rewrite_ota_seq(uint32_t seq, uint8_t sec_id, const esp_partition_t *ota_data_partition)
-{
-    esp_err_t ret;
-
-    if (sec_id <= 3) {
-        s_ota_select[sec_id].ota_seq = seq;
-        s_ota_select[sec_id].crc = ota_select_crc(&s_ota_select[sec_id]);
-        ret = esp_partition_erase_range(ota_data_partition, sec_id * SPI_FLASH_SEC_SIZE, SPI_FLASH_SEC_SIZE);
-        if (ret != ESP_OK) {
-            return ret;
-        } else {
-            return esp_partition_write(ota_data_partition, SPI_FLASH_SEC_SIZE * sec_id, &s_ota_select[sec_id].ota_seq, sizeof(esp_ota_select_entry_t));
-        }
-    } else {
-        return ESP_ERR_INVALID_ARG;
-    }
-}
 
 static uint8_t get_ota_partition_count(void)
 {
@@ -297,7 +268,7 @@ static uint8_t get_ota_partition_count(void)
     return ota_app_count;
 }
 
-static esp_err_t esp_rewrite_ota_data(esp_partition_subtype_t subtype)
+static esp_err_t esp_rewrite_ota_data(esp_partition_subtype_t subtype, uint32_t max_boot_count)
 {
     esp_err_t ret;
     const esp_partition_t *find_partition = NULL;
@@ -346,26 +317,26 @@ static esp_err_t esp_rewrite_ota_data(esp_partition_subtype_t subtype)
             }
 
             if (s_ota_select[0].ota_seq >= s_ota_select[1].ota_seq) {
-                return rewrite_ota_seq((SUB_TYPE_ID(subtype) + 1) % ota_app_count + i * ota_app_count, 1, find_partition);
+                return rewrite_ota_seq((SUB_TYPE_ID(subtype) + 1) % ota_app_count + i * ota_app_count, max_boot_count, 1, find_partition->address);
             } else {
-                return rewrite_ota_seq((SUB_TYPE_ID(subtype) + 1) % ota_app_count + i * ota_app_count, 0, find_partition);
+                return rewrite_ota_seq((SUB_TYPE_ID(subtype) + 1) % ota_app_count + i * ota_app_count, max_boot_count, 0, find_partition->address);
             }
 
         } else if (ota_select_valid(&s_ota_select[0])) {
             while (s_ota_select[0].ota_seq > (SUB_TYPE_ID(subtype) + 1) % ota_app_count + i * ota_app_count) {
                 i++;
             }
-            return rewrite_ota_seq((SUB_TYPE_ID(subtype) + 1) % ota_app_count + i * ota_app_count, 1, find_partition);
+            return rewrite_ota_seq((SUB_TYPE_ID(subtype) + 1) % ota_app_count + i * ota_app_count, max_boot_count, 1, find_partition->address);
 
         } else if (ota_select_valid(&s_ota_select[1])) {
             while (s_ota_select[1].ota_seq > (SUB_TYPE_ID(subtype) + 1) % ota_app_count + i * ota_app_count) {
                 i++;
             }
-            return rewrite_ota_seq((SUB_TYPE_ID(subtype) + 1) % ota_app_count + i * ota_app_count, 0, find_partition);
+            return rewrite_ota_seq((SUB_TYPE_ID(subtype) + 1) % ota_app_count + i * ota_app_count, max_boot_count, 0, find_partition->address);
 
         } else {
             /* Both OTA slots are invalid, probably because unformatted... */
-            return rewrite_ota_seq(SUB_TYPE_ID(subtype) + 1, 0, find_partition);
+            return rewrite_ota_seq(SUB_TYPE_ID(subtype) + 1, max_boot_count, 0, find_partition->address);
         }
 
     } else {
@@ -373,8 +344,7 @@ static esp_err_t esp_rewrite_ota_data(esp_partition_subtype_t subtype)
     }
 }
 
-
-esp_err_t esp_ota_set_boot_partition(const esp_partition_t *partition)
+esp_err_t esp_ota_set_boot_partition(const esp_partition_t *partition, uint32_t max_boot_count)
 {
     const esp_partition_t *find_partition = NULL;
     if (partition == NULL) {
@@ -409,7 +379,7 @@ esp_err_t esp_ota_set_boot_partition(const esp_partition_t *partition)
             // try to find this partition in flash,if not find it ,return error
             find_partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_OTA, NULL);
             if (find_partition != NULL) {
-                return esp_rewrite_ota_data(partition->subtype);
+                return esp_rewrite_ota_data(partition->subtype, max_boot_count);
             } else {
                 return ESP_ERR_NOT_FOUND;
             }

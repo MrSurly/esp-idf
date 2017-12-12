@@ -286,7 +286,7 @@ static void log_invalid_app_partition(int index)
    This partition will only be booted if it contains a valid app image, otherwise load_boot_image() will search
    for a valid partition using this selection as the starting point.
 */
-static int get_selected_boot_partition(const bootloader_state_t *bs)
+static int get_selected_boot_partition(bootloader_state_t *bs)
 {
     esp_ota_select_entry_t sa,sb;
     const esp_ota_select_entry_t *ota_select_map;
@@ -325,15 +325,23 @@ static int get_selected_boot_partition(const bootloader_state_t *bs)
             if(ota_select_valid(&sa) && ota_select_valid(&sb)) {
                 ota_valid = true;
                 ota_msg = "Both OTA values";
-                ota_seq = MAX(sa.ota_seq, sb.ota_seq) - 1;
+                if (sa.ota_seq > sb.ota_seq) {
+                    ota_seq = sa.ota_seq - 1;
+                    bs->ota_max_boot_count = sa.max_boot_count;
+                } else {
+                    ota_seq = sb.ota_seq - 1;
+                    bs->ota_max_boot_count = sb.max_boot_count;
+                }
             } else if(ota_select_valid(&sa)) {
                 ota_valid = true;
                 ota_msg = "Only OTA sequence A is";
                 ota_seq = sa.ota_seq - 1;
+                bs->ota_max_boot_count = sa.max_boot_count;
             } else if(ota_select_valid(&sb)) {
                 ota_valid = true;
                 ota_msg = "Only OTA sequence B is";
                 ota_seq = sb.ota_seq - 1;
+                bs->ota_max_boot_count = sb.max_boot_count;
             }
 
             if (ota_valid) {
@@ -402,10 +410,16 @@ static bool load_boot_image(const bootloader_state_t *bs, int start_index, esp_i
                 if (bs->ota_info.size >= SPI_FLASH_SEC_SIZE * 4) {
                     // possible boot count
                     uint32_t boot_count;
+                    esp_ota_boot_count_op_bootloader(bs->ota_info.offset, OTA_BOOT_COUNT_INCREMENT, NULL);
                     if (esp_ota_boot_count_op_bootloader(bs->ota_info.offset, OTA_BOOT_COUNT_QUERY, &boot_count) == ESP_OK) {
-                        ESP_LOGI(TAG, "Boot count %u", boot_count);
+                        ESP_LOGI(TAG, "Boot count %u Max boot count: %u", boot_count, bs->ota_max_boot_count);
+
+                        if (bs->ota_max_boot_count > 0 && boot_count > bs->ota_max_boot_count ) {
+                            ESP_LOGI(TAG,"Max boot count of %u has been reached, resetting to factory app", bs->ota_max_boot_count);
+                            bootloader_flash_erase_sector(bs->ota_info.offset / SPI_FLASH_SEC_SIZE);
+                            bootloader_flash_erase_sector(bs->ota_info.offset / SPI_FLASH_SEC_SIZE + 1);
+                        }
                     }
-                    //esp_ota_boot_count_op(OTA_BOOT_COUNT_INCREMENT, NULL);
                 }
             }
             return true;

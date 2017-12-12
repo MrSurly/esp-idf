@@ -60,6 +60,8 @@ typedef enum {
 
 esp_err_t esp_ota_boot_count_op(esp_ota_boot_count_op_t op, uint32_t* count_return);
 
+esp_err_t rewrite_ota_seq(uint32_t seq, uint32_t max_boot_count, uint8_t sec_id, uint32_t ota_part_offset);
+
 #ifdef BOOTLOADER_BUILD
 esp_err_t esp_ota_boot_count_op_bootloader(uint32_t ota_part_offset, esp_ota_boot_count_op_t op, uint32_t* count_return);
 #endif

@@ -32,6 +32,7 @@ extern "C"
 
 typedef struct {
     esp_partition_pos_t ota_info;
+    uint32_t ota_max_boot_count;
     esp_partition_pos_t factory;
     esp_partition_pos_t test;
     esp_partition_pos_t ota[MAX_OTA_SLOTS];

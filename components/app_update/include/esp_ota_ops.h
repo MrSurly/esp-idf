@@ -35,7 +35,6 @@ extern "C"
 #define ESP_ERR_OTA_SELECT_INFO_INVALID          (ESP_ERR_OTA_BASE + 0x02)  /*!< Error if OTA data partition contains invalid content */
 #define ESP_ERR_OTA_VALIDATE_FAILED              (ESP_ERR_OTA_BASE + 0x03)  /*!< Error if OTA app image is invalid */
 
-
 /**
  * @brief Opaque handle for an application OTA update
  *
@@ -113,6 +112,7 @@ esp_err_t esp_ota_end(esp_ota_handle_t handle);
  * @note If this function returns ESP_OK, calling esp_restart() will boot the newly configured app partition.
  *
  * @param partition Pointer to info for partition containing app image to boot.
+ * @param max_boot_count If the boot counter reaches this value, fall back to factory image. Set to zero to disable.
  *
  * @return
  *    - ESP_OK: OTA data updated, next reboot will use specified partition.
@@ -121,7 +121,7 @@ esp_err_t esp_ota_end(esp_ota_handle_t handle);
  *    - ESP_ERR_NOT_FOUND: OTA data partition not found.
  *    - ESP_ERR_FLASH_OP_TIMEOUT or ESP_ERR_FLASH_OP_FAIL: Flash erase or write failed.
  */
-esp_err_t esp_ota_set_boot_partition(const esp_partition_t* partition);
+esp_err_t esp_ota_set_boot_partition(const esp_partition_t* partition, uint32_t max_boot_count);
 
 /**
  * @brief Get partition info of currently configured boot app
